@@ -1,4 +1,5 @@
 use crate::camera::MainCamera;
+use crate::ui::ui;
 use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_rapier2d::prelude::*;
 use bevy_egui::EguiContexts;
@@ -8,8 +9,8 @@ pub struct PegPlugin;
 impl Plugin for PegPlugin {
     fn build(&self, app: &mut App) {
         app
-            .add_systems(Update, spawn_peg)
-            .add_systems(Update, spawn_ball)
+            .add_systems(Update, spawn_peg.after(ui))
+            .add_systems(Update, spawn_ball.after(ui))
             .add_systems(Update, delete_all_pegs_and_balls);
     }
 }

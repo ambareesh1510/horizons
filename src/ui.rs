@@ -17,7 +17,7 @@ enum UiState {
     Ball,
 }
 
-fn ui(mut contexts: EguiContexts) {
+pub fn ui(mut contexts: EguiContexts) {
     egui::Window::new("Hello").show(contexts.ctx_mut(), |ui| {
         ui.label("World");
     });
