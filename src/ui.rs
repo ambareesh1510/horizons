@@ -12,7 +12,7 @@ impl Plugin for UiPlugin {
             .insert_resource(UiState { started: false })
             .insert_resource(Time::<Virtual>::default())
             .add_systems(Update, ui)
-            .add_systems(Update, load_save_file.after(delete_all_objects));
+            .add_systems(FixedUpdate, load_save_file.after(delete_all_objects));
     }
 }
 

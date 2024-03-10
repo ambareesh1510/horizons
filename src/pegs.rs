@@ -3,7 +3,7 @@ use crate::ui::ui;
 use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_rapier2d::prelude::*;
 use bevy_egui::EguiContexts;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use serde::{Serialize, Deserialize};
 
 pub struct PegPlugin;
@@ -11,22 +11,22 @@ pub struct PegPlugin;
 impl Plugin for PegPlugin {
     fn build(&self, app: &mut App) {
         app
-            .insert_resource(SceneObjects { objects: HashMap::new(), object_count: 0 })
+            .insert_resource(SceneObjects { objects: BTreeMap::new(), object_count: 0 })
             .insert_resource(Octave(3))
             .insert_resource(CurrentDraggedPegId(None))
             .insert_resource(ChordInput { input_active: false, input_notes: Vec::new() })
             .add_event::<SpawnObject>()
             .add_event::<DeleteObjects>()
-            .add_systems(Update, delete_all_objects)
-            .add_systems(Update, spawn_object)
-            .add_systems(Update, spawn_ball.after(ui))
-            .add_systems(Update, spawn_ball_spawner.after(ui))
-            .add_systems(Update, cleanup_sounds)
+            .add_systems(FixedUpdate, delete_all_objects)
+            .add_systems(FixedUpdate, spawn_object)
+            .add_systems(FixedUpdate, spawn_ball.after(ui))
+            .add_systems(FixedUpdate, spawn_ball_spawner.after(ui))
+            .add_systems(FixedUpdate, cleanup_sounds)
             .add_systems(Startup, setup_sound)
-            .add_systems(Update, place_peg)
-            .add_systems(Update, display_events)
-            .add_systems(Update, drag_peg)
-            .add_systems(Update, clear_screen);
+            .add_systems(FixedUpdate, place_peg)
+            .add_systems(FixedUpdate, display_events)
+            .add_systems(FixedUpdate, drag_peg)
+            .add_systems(FixedUpdate, clear_screen);
     
     }
 }
@@ -36,7 +36,7 @@ pub struct Octave(pub u32);
 
 #[derive(Resource, Clone, Serialize, Deserialize)]
 pub struct SceneObjects {
-    pub objects: HashMap<u32, Object>,
+    pub objects: BTreeMap<u32, Object>,
     object_count: u32
 }
 

@@ -29,5 +29,12 @@ fn main() {
         .add_plugins(CameraPlugin)
         .add_plugins(PegPlugin)
         .add_plugins(UiPlugin)
+        .add_systems(Startup, setup)
         .run();
+}
+
+fn setup(
+    mut rapier_config: ResMut<RapierConfiguration>,
+) {
+    rapier_config.timestep_mode = TimestepMode::Fixed { dt: 1./60., substeps: 1 };
 }
