@@ -16,7 +16,6 @@ impl Plugin for PegPlugin {
             .insert_resource(CurrentDraggedPegId(None))
             .add_event::<SpawnObject>()
             .add_systems(Update, spawn_object)
-            .add_systems(Update, spawn_peg.after(ui))
             .add_systems(Update, spawn_ball.after(ui))
             .add_systems(Update, spawn_ball_spawner.after(ui))
             .add_systems(Update, cleanup_sounds)
@@ -249,25 +248,25 @@ fn spawn_object(
     }
 }
 
-fn spawn_peg(
-    input: Res<ButtonInput<MouseButton>>,
-    mut contexts: EguiContexts,
-    primary_window: Query<&Window, With<PrimaryWindow>>,
-    primary_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
-    mut spawn_event_writer: EventWriter<SpawnObject>,
-) {
-    let (camera, camera_transform) = primary_camera.single();
-    if input.just_pressed(MouseButton::Left) && !contexts.ctx_mut().wants_pointer_input() {
-        if let Some(position) = primary_window
-            .single()
-            .cursor_position()
-            .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
-            .map(|ray| ray.origin.truncate())
-        {
-            spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, Notes::A3)));
-        }
-    }
-}
+// fn spawn_peg(
+//     input: Res<ButtonInput<MouseButton>>,
+//     mut contexts: EguiContexts,
+//     primary_window: Query<&Window, With<PrimaryWindow>>,
+//     primary_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
+//     mut spawn_event_writer: EventWriter<SpawnObject>,
+// ) {
+//     let (camera, camera_transform) = primary_camera.single();
+//     if input.just_pressed(MouseButton::Left) && !contexts.ctx_mut().wants_pointer_input() {
+//         if let Some(position) = primary_window
+//             .single()
+//             .cursor_position()
+//             .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+//             .map(|ray| ray.origin.truncate())
+//         {
+//             spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, Notes::A3)));
+//         }
+//     }
+// }
 
 fn spawn_ball(
     input: Res<ButtonInput<MouseButton>>,
@@ -439,18 +438,20 @@ fn place_peg(
 struct CurrentDraggedPegId(Option<u32>);
 
 fn drag_peg(
-    input: Res<ButtonInput<KeyCode>>,
+    input: Res<ButtonInput<MouseButton>>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
     mut contexts: EguiContexts,
     primary_window: Query<&Window, With<PrimaryWindow>>,
     primary_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
-    mut pegs: Query<(&mut Transform, &ObjectId, Entity), With<Peg>>,
+    mut pegs: Query<(&mut Transform, &ObjectId, Entity), (With<Peg>, Without<BallSpawner>)>,
+    mut ball_spawners: Query<(&mut Transform, &ObjectId, Entity), With<BallSpawner>>,
     mut scene_objects: ResMut<SceneObjects>,
     mut current_dragged_peg_id: ResMut<CurrentDraggedPegId>,
     mut commands: Commands,
 ) {
     let (camera, camera_transform) = primary_camera.single();
 
-    if input.just_pressed(KeyCode::KeyX) && !contexts.ctx_mut().wants_pointer_input() {
+    if keyboard_input.just_pressed(KeyCode::KeyX) && !contexts.ctx_mut().wants_pointer_input() {
         if let Some(position) = primary_window
             .single()
             .cursor_position()
@@ -461,10 +462,18 @@ fn drag_peg(
                 if transform.translation.truncate().distance(position) <= 10. {
                     commands.entity(entity_id).despawn();
                     scene_objects.objects.remove(id);
+                    return;
+                }
+            }
+            for (transform, ObjectId(id), entity_id) in ball_spawners.iter() {
+                if transform.translation.truncate().distance(position) <= 10. {
+                    commands.entity(entity_id).despawn();
+                    scene_objects.objects.remove(id);
+                    return;
                 }
             }
         }
-    } else if input.just_pressed(KeyCode::Space) && !contexts.ctx_mut().wants_pointer_input() {
+    } else if input.just_pressed(MouseButton::Left) && !contexts.ctx_mut().wants_pointer_input() {
         if let Some(position) = primary_window
             .single()
             .cursor_position()
@@ -474,10 +483,17 @@ fn drag_peg(
             for (transform, ObjectId(id), _) in pegs.iter() {
                 if transform.translation.truncate().distance(position) <= 10. {
                     current_dragged_peg_id.0 = Some(*id);
+                    return;
+                }
+            }
+            for (transform, ObjectId(id), _) in ball_spawners.iter() {
+                if transform.translation.truncate().distance(position) <= 10. {
+                    current_dragged_peg_id.0 = Some(*id);
+                    return;
                 }
             }
         }
-    } else if input.pressed(KeyCode::Space) {
+    } else if input.pressed(MouseButton::Left) {
         match current_dragged_peg_id.0 {
             None => {},
             Some(ref id) => {
@@ -488,12 +504,33 @@ fn drag_peg(
                     .map(|ray| ray.origin.truncate())
                 {
                     let object = scene_objects.objects.get_mut(id).unwrap();
-                    let Object::Peg(x, y) = object else {
-                        panic!("Expectedd to be dragging peg; was not dragging peg!");
-                    };
+                    let x;
+                    let y;
+                    match object {
+                        Object::Peg(ref mut x_, ref mut y_, _) => {
+                            x = x_;
+                            y = y_;
+                        }
+                        Object::BallSpawner(ref mut x_, ref mut y_) => {
+                            x = x_;
+                            y = y_;
+                        }
+                        _ => panic!("Expected to be dragging peg; was not dragging peg!"),
+                    }
+                    // let Object::Peg(x, y, _) = object else {
+                    //     let Object::BallSpawner(x, y) = object else {
+                    //         panic!("Expecteddd to be dragging peg; was not dragging peg!");
+                    //     };
+                    // };
                     *x = position.x;
                     *y = position.y;
                     for (mut transform, ObjectId(obj_id), _) in pegs.iter_mut() {
+                        if obj_id == id {
+                            transform.translation.x = position.x;
+                            transform.translation.y = position.y;
+                        }
+                    }
+                    for (mut transform, ObjectId(obj_id), _) in ball_spawners.iter_mut() {
                         if obj_id == id {
                             transform.translation.x = position.x;
                             transform.translation.y = position.y;
