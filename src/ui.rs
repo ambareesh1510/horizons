@@ -5,9 +5,7 @@ pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .insert_resource(UiState::Peg)
-            .add_systems(Update, ui);
+        app.insert_resource(UiState::Peg).add_systems(Update, ui);
     }
 }
 
