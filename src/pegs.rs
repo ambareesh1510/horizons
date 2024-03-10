@@ -392,6 +392,7 @@ fn place_peg(
                 spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, chord_input.input_notes.clone())));
             }
             chord_input.input_notes = Vec::new();
+            return;
         }
         if input.just_pressed(KeyCode::Digit1) {
             octave.0 = 3;
@@ -454,6 +455,74 @@ fn place_peg(
     } else {
         if input.just_pressed(KeyCode::Enter) {
             chord_input.input_active = true;
+        } else {
+            if input.just_pressed(KeyCode::Digit1) {
+                octave.0 = 3;
+            }
+            if input.just_pressed(KeyCode::Digit2) {
+                octave.0 = 4;
+            }
+            let mut index = if octave.0 == 3 {
+                0
+            } else {
+                12
+            };
+            let mut shouldspawn = false;
+            
+            if input.just_pressed(KeyCode::KeyC) {
+                shouldspawn = true;
+                index += 0;
+            }
+            if input.just_pressed(KeyCode::KeyD) {
+                shouldspawn = true;
+
+                index += 2;
+            }
+            if input.just_pressed(KeyCode::KeyE) {
+                shouldspawn = true;
+                index += 4;
+            }
+            if input.just_pressed(KeyCode::KeyF) {
+                shouldspawn = true;
+                index += 5;
+            }
+            if input.just_pressed(KeyCode::KeyG) {
+                shouldspawn = true;
+                index += 7;
+            }
+            if input.just_pressed(KeyCode::KeyA) {
+                shouldspawn = true;
+                index += 9;
+            } 
+            if input.just_pressed(KeyCode::KeyB) {
+                shouldspawn = true;
+                index += 11;
+            }
+            
+            
+            if input.pressed(KeyCode::ShiftLeft) || input.just_pressed(KeyCode::ShiftRight) {
+                if index != 24 {
+                    index += 1;
+                }
+            }
+
+            if input.pressed(KeyCode::ControlLeft) || input.just_pressed(KeyCode::ControlRight) {
+                if index != 0 {
+                    index -= 1;
+                }
+            }
+            if shouldspawn {
+                // chord_input.input_notes.push(index);
+                let (camera, camera_transform) = primary_camera.single();
+                if let Some(position) = primary_window
+                    .single()
+                    .cursor_position()
+                    .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+                    .map(|ray| ray.origin.truncate())
+                {
+                    spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, vec![index])));
+                }
+            }
         }
     }
     
