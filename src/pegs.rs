@@ -48,7 +48,7 @@ pub enum Object {
 }
 
 #[derive(Event)]
-pub struct SpawnObject(pub Object);
+pub struct SpawnObject(pub Object, pub bool);
 
 #[derive(Component)]
 pub struct Peg;
@@ -227,9 +227,11 @@ fn spawn_object(
                         coefficient: 0.7,
                         combine_rule: CoefficientCombineRule::Max,
                     });
-                let object_count = scene_objects.object_count;
-                scene_objects.objects.insert(object_count, ev.0.clone());
-                scene_objects.object_count += 1;
+                if ev.1 {
+                    let object_count = scene_objects.object_count;
+                    scene_objects.objects.insert(object_count, ev.0.clone());
+                    scene_objects.object_count += 1;
+                }
             }
             Object::Ball(x, y) => {
                 commands
@@ -272,9 +274,11 @@ fn spawn_object(
                     })
                     .insert(BallSpawner)
                     .insert(ObjectId(scene_objects.object_count));
-                let object_count = scene_objects.object_count;
-                scene_objects.objects.insert(object_count, ev.0.clone());
-                scene_objects.object_count += 1;
+                if ev.1 {
+                    let object_count = scene_objects.object_count;
+                    scene_objects.objects.insert(object_count, ev.0.clone());
+                    scene_objects.object_count += 1;
+                }
             }
         }
     }
@@ -295,7 +299,7 @@ fn spawn_ball(
             .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
             .map(|ray| ray.origin.truncate())
         {
-            spawn_event_writer.send(SpawnObject(Object::Ball(position.x, position.y)));
+            spawn_event_writer.send(SpawnObject(Object::Ball(position.x, position.y), true));
         }
     }
 }
@@ -315,7 +319,7 @@ fn spawn_ball_spawner(
             .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
             .map(|ray| ray.origin.truncate())
         {
-            spawn_event_writer.send(SpawnObject(Object::BallSpawner(position.x, position.y)));
+            spawn_event_writer.send(SpawnObject(Object::BallSpawner(position.x, position.y), true));
         }
     }
 }
@@ -372,7 +376,7 @@ fn place_peg(
                     .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
                     .map(|ray| ray.origin.truncate())
                 {
-                    spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, chord_input.input_notes.clone())));
+                    spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, chord_input.input_notes.clone()), true));
                 }
             }
             chord_input.input_notes = Vec::new();
@@ -504,7 +508,7 @@ fn place_peg(
                     .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
                     .map(|ray| ray.origin.truncate())
                 {
-                    spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, vec![index])));
+                    spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, vec![index]), true));
                 }
             }
         }

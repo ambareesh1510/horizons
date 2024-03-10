@@ -51,7 +51,7 @@ pub fn ui(
             if ui.button("Start").clicked() {
                 ui_state.started = true;
                 for transform in query_ball_spawners.iter() {
-                    spawn_event_writer.send(SpawnObject(Object::Ball(transform.translation.x, transform.translation.y)));
+                    spawn_event_writer.send(SpawnObject(Object::Ball(transform.translation.x, transform.translation.y), true));
                 }
             }
         }
@@ -78,7 +78,7 @@ fn load_save_file(
     for ev in ev_loaded.read() {
         *scene_objects = rmp_serde::from_slice(&ev.contents).unwrap();
         for object in scene_objects.objects.values() {
-            spawn_event_writer.send(SpawnObject(object.clone()));
+            spawn_event_writer.send(SpawnObject(object.clone(), false));
         }
     }
 }
