@@ -12,6 +12,7 @@ impl Plugin for PegPlugin {
     fn build(&self, app: &mut App) {
         app
             .insert_resource(SceneObjects { objects: HashMap::new(), object_count: 0 })
+            .insert_resource(CurrentDraggedPegId(None))
             .add_event::<SpawnObject>()
             .add_systems(Update, spawn_object)
             .add_systems(Update, spawn_peg.after(ui))
@@ -20,6 +21,7 @@ impl Plugin for PegPlugin {
             .add_systems(Update, cleanup_sounds)
             .add_systems(Startup, setup_sound)
             .add_systems(Update, display_events)
+            .add_systems(Update, drag_peg)
             .add_systems(Update, delete_all_pegs_and_balls);
     
     }
@@ -133,7 +135,6 @@ fn display_events(
     for collision_event in collision_events.read() {
         match collision_event {
             CollisionEvent::Started(e1, e2, _flags) => {
-                println!("asdf");
                 let note;
                 match peg_query.get(*e1) {
                     Ok(n) => note = n,
@@ -150,7 +151,7 @@ fn display_events(
                     ..default()
                 });
             }
-            CollisionEvent::Stopped(e1, e2, flags) => {}
+            _ => {}
         }
         // if let Ok(Notes::C3) = peg_query.get_component::<Notes>(collision_event.collider1_entity) {
         //     commands.spawn(
@@ -201,9 +202,9 @@ fn spawn_object(
                         coefficient: 0.7,
                         combine_rule: CoefficientCombineRule::Max,
                     });
-                scene_objects.object_count += 1;
                 let object_count = scene_objects.object_count;
                 scene_objects.objects.insert(object_count, ev.0.clone());
+                scene_objects.object_count += 1;
             }
             Object::Ball(x, y) => {
                 commands
@@ -235,9 +236,9 @@ fn spawn_object(
                     })
                     .insert(BallSpawner)
                     .insert(ObjectId(scene_objects.object_count));
-                scene_objects.object_count += 1;
                 let object_count = scene_objects.object_count;
                 scene_objects.objects.insert(object_count, ev.0.clone());
+                scene_objects.object_count += 1;
             }
         }
     }
@@ -318,5 +319,74 @@ fn delete_all_pegs_and_balls(
     }
 }
 
+#[derive(Resource)]
+struct CurrentDraggedPegId(Option<u32>);
 
+fn drag_peg(
+    input: Res<ButtonInput<KeyCode>>,
+    mut contexts: EguiContexts,
+    primary_window: Query<&Window, With<PrimaryWindow>>,
+    primary_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
+    mut pegs: Query<(&mut Transform, &ObjectId, Entity), With<Peg>>,
+    mut scene_objects: ResMut<SceneObjects>,
+    mut current_dragged_peg_id: ResMut<CurrentDraggedPegId>,
+    mut commands: Commands,
+) {
+    let (camera, camera_transform) = primary_camera.single();
 
+    if input.just_pressed(KeyCode::KeyX) && !contexts.ctx_mut().wants_pointer_input() {
+        if let Some(position) = primary_window
+            .single()
+            .cursor_position()
+            .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+            .map(|ray| ray.origin.truncate())
+        {
+            for (transform, ObjectId(id), entity_id) in pegs.iter() {
+                if transform.translation.truncate().distance(position) <= 10. {
+                    commands.entity(entity_id).despawn();
+                    scene_objects.objects.remove(id);
+                }
+            }
+        }
+    } else if input.just_pressed(KeyCode::Space) && !contexts.ctx_mut().wants_pointer_input() {
+        if let Some(position) = primary_window
+            .single()
+            .cursor_position()
+            .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+            .map(|ray| ray.origin.truncate())
+        {
+            for (transform, ObjectId(id), _) in pegs.iter() {
+                if transform.translation.truncate().distance(position) <= 10. {
+                    current_dragged_peg_id.0 = Some(*id);
+                }
+            }
+        }
+    } else if input.pressed(KeyCode::Space) {
+        match current_dragged_peg_id.0 {
+            None => {},
+            Some(ref id) => {
+                if let Some(position) = primary_window
+                    .single()
+                    .cursor_position()
+                    .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+                    .map(|ray| ray.origin.truncate())
+                {
+                    let object = scene_objects.objects.get_mut(id).unwrap();
+                    let Object::Peg(x, y) = object else {
+                        panic!("Expectedd to be dragging peg; was not dragging peg!");
+                    };
+                    *x = position.x;
+                    *y = position.y;
+                    for (mut transform, ObjectId(obj_id), _) in pegs.iter_mut() {
+                        if obj_id == id {
+                            transform.translation.x = position.x;
+                            transform.translation.y = position.y;
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        current_dragged_peg_id.0 = None;
+    }
+}
