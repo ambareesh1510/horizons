@@ -39,7 +39,7 @@ pub struct SceneObjects {
 
 #[derive(Resource, Clone, Serialize, Deserialize)]
 pub enum Object {
-    Peg(f32, f32, Notes),
+    Peg(f32, f32, Vec<Notes>),
     Ball(f32, f32),
     BallSpawner(f32, f32),
 }
@@ -186,7 +186,7 @@ fn spawn_object(
 ) {
     for ev in spawn_events.read() {
         match ev.0 {
-            Object::Peg(x, y, note) => {
+            Object::Peg(x, y, notes) => {
                 commands
                     .spawn(SpriteBundle {
                         texture: asset_server.load("peg.png"),
@@ -209,6 +209,7 @@ fn spawn_object(
                 let object_count = scene_objects.object_count;
                 scene_objects.objects.insert(object_count, ev.0.clone());
                 scene_objects.object_count += 1;
+                
             }
             Object::Ball(x, y) => {
                 commands
@@ -419,13 +420,15 @@ fn place_peg(
     }
     if(shouldspawn) {
         let (camera, camera_transform) = primary_camera.single();
+        let mut vec = Vec::new();
+        vec.push(note);
         if let Some(position) = primary_window
                 .single()
                 .cursor_position()
                 .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
                 .map(|ray| ray.origin.truncate())
             {
-                spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, note)));
+                spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, vec)));
             }
     }
     
