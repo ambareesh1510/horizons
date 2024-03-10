@@ -39,7 +39,7 @@ pub struct SceneObjects {
 
 #[derive(Resource, Clone, Serialize, Deserialize)]
 pub enum Object {
-    Peg(f32, f32, Vec<Notes>),
+    Peg(f32, f32, Vec<u32>),
     Ball(f32, f32),
     BallSpawner(f32, f32),
 }
@@ -133,24 +133,24 @@ fn display_events(
     mut collision_events: EventReader<CollisionEvent>,
     mut contact_force_events: EventReader<ContactForceEvent>,
     mut commands: Commands,
-    peg_query: Query<(&Notes, &Sprite)>,
-    mut background_query: Query<&mut Sprite, (With<Background>, Without<Notes>)>,
+    peg_query: Query<(&NotesList, &Sprite)>,
+    mut background_query: Query<&mut Sprite, (With<Background>, Without<NotesList>)>,
     asset_server: Res<AssetServer>,
 ) {
     let Ok(mut background_sprite) = background_query.get_single_mut() else { return };
     for collision_event in collision_events.read() {
         match collision_event {
             CollisionEvent::Started(e1, e2, _flags) => {
-                let note;
+                let notes;
                 let peg_sprite;
                 match peg_query.get(*e1) {
                     Ok((n, sprite)) => {
-                        note = n;
+                        notes = n;
                         peg_sprite = sprite;
                     }
                     Err(_) => match peg_query.get(*e2) {
                         Ok((n, sprite)) => {
-                            note = n;
+                            notes = n;
                             peg_sprite = sprite;
                         }
                         Err(_) => {
@@ -159,10 +159,13 @@ fn display_events(
                         }
                     },
                 }
-                commands.spawn(AudioBundle {
-                    source: asset_server.load(note.to_file_path()),
-                    ..default()
-                });
+                for note in &notes.0 {
+                    commands.spawn(AudioBundle {
+                        source: asset_server.load(note.to_file_path()),
+                        ..default()
+                    });
+                }
+                
                 // use peg_sprite
                 background_sprite.color = Color::rgb_from_array(peg_sprite.color.rgb_to_vec3() / 3.5);
             }
@@ -176,6 +179,10 @@ fn display_events(
         println!("Received contact force event: {:?}", contact_force_event);
     }
 }
+
+#[derive(Component)]
+pub struct NotesList(Vec<Notes>);
+
 #[derive(Component)]
 pub struct BallSpawner;
 
@@ -198,8 +205,9 @@ fn spawn_object(
 ) {
     for ev in spawn_events.read() {
         match ev.0 {
-            Object::Peg(x, y, notes) => {
-                let (r, g, b) = gaussian_sample_triple(convert_note_to_index(&notes[0]) as f32 / 24.);
+            Object::Peg(x, y, ref notes) => {
+                let noteslist = NotesList(notes.iter().map(|&i| convert_index_to_note(i)).collect());
+                let (r, g, b) = gaussian_sample_triple(notes[0] as f32 / 24.);
                 commands
                     .spawn(SpriteBundle {
                         texture: asset_server.load("peg.png"),
@@ -219,7 +227,7 @@ fn spawn_object(
                     .insert(ObjectId(scene_objects.object_count))
                     .insert(RigidBody::Fixed)
                     .insert(Collider::ball(45.))
-                    .insert(convert_index_to_note(note))
+                    .insert(noteslist)
                     .insert(Restitution {
                         coefficient: 0.7,
                         combine_rule: CoefficientCombineRule::Max,
@@ -227,6 +235,9 @@ fn spawn_object(
                 let object_count = scene_objects.object_count;
                 scene_objects.objects.insert(object_count, ev.0.clone());
                 scene_objects.object_count += 1;
+
+                
+                
                 
             }
             Object::Ball(x, y) => {
@@ -420,7 +431,7 @@ fn place_peg(
     if shouldspawn {
         let (camera, camera_transform) = primary_camera.single();
         let mut vec = Vec::new();
-        vec.push(note);
+        vec.push(index);
         if let Some(position) = primary_window
                 .single()
                 .cursor_position()
