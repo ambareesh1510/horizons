@@ -1,6 +1,6 @@
 use crate::camera::{Background, MainCamera};
 use crate::ui::ui;
-use bevy::{asset, prelude::*, window::PrimaryWindow};
+use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_rapier2d::prelude::*;
 use bevy_egui::EguiContexts;
 use std::collections::HashMap;
@@ -16,6 +16,8 @@ impl Plugin for PegPlugin {
             .insert_resource(CurrentDraggedPegId(None))
             .insert_resource(ChordInput { input_active: false, input_notes: Vec::new() })
             .add_event::<SpawnObject>()
+            .add_event::<DeleteObjects>()
+            .add_systems(Update, delete_all_objects)
             .add_systems(Update, spawn_object)
             .add_systems(Update, spawn_ball.after(ui))
             .add_systems(Update, spawn_ball_spawner.after(ui))
@@ -24,7 +26,7 @@ impl Plugin for PegPlugin {
             .add_systems(Update, place_peg)
             .add_systems(Update, display_events)
             .add_systems(Update, drag_peg)
-            .add_systems(Update, delete_all_pegs_and_balls);
+            .add_systems(Update, clear_screen);
     
     }
 }
@@ -49,7 +51,7 @@ pub enum Object {
 pub struct SpawnObject(pub Object);
 
 #[derive(Component)]
-struct Peg;
+pub struct Peg;
 
 #[derive(Component)]
 pub struct Ball;
@@ -132,7 +134,6 @@ fn cleanup_sounds(mut commands: Commands, controller: Query<(Entity, &AudioSink)
 
 fn display_events(
     mut collision_events: EventReader<CollisionEvent>,
-    mut contact_force_events: EventReader<ContactForceEvent>,
     mut commands: Commands,
     peg_query: Query<(&NotesList, &Sprite)>,
     mut background_query: Query<&mut Sprite, (With<Background>, Without<NotesList>)>,
@@ -154,10 +155,7 @@ fn display_events(
                             notes = n;
                             peg_sprite = sprite;
                         }
-                        Err(_) => {
-                            // println!("note not played {:?}", e);
-                            return;
-                        }
+                        Err(_) => return,
                     },
                 }
                 for note in &notes.0 {
@@ -169,16 +167,12 @@ fn display_events(
                 
                 // use peg_sprite
                 background_sprite.color = Color::rgb_from_array(peg_sprite.color.rgb_to_vec3() / 3.5);
+                // peg_sprite.color = Color::rgb_from_array((-1. * peg_sprite.color.rgb_to_vec3()).exp());
             }
             _ => {}
         }
     }
     background_sprite.color = Color::rgb_from_array(background_sprite.color.rgb_to_vec3() / 1.1);
-    
-
-    for contact_force_event in contact_force_events.read() {
-        println!("Received contact force event: {:?}", contact_force_event);
-    }
 }
 
 #[derive(Component)]
@@ -290,26 +284,6 @@ fn spawn_object(
     }
 }
 
-// fn spawn_peg(
-//     input: Res<ButtonInput<MouseButton>>,
-//     mut contexts: EguiContexts,
-//     primary_window: Query<&Window, With<PrimaryWindow>>,
-//     primary_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
-//     mut spawn_event_writer: EventWriter<SpawnObject>,
-// ) {
-//     let (camera, camera_transform) = primary_camera.single();
-//     if input.just_pressed(MouseButton::Left) && !contexts.ctx_mut().wants_pointer_input() {
-//         if let Some(position) = primary_window
-//             .single()
-//             .cursor_position()
-//             .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
-//             .map(|ray| ray.origin.truncate())
-//         {
-//             spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, Notes::A3)));
-//         }
-//     }
-// }
-
 fn spawn_ball(
     input: Res<ButtonInput<MouseButton>>,
     mut contexts: EguiContexts,
@@ -350,18 +324,30 @@ fn spawn_ball_spawner(
     }
 }
 
-fn delete_all_pegs_and_balls(
-    input: Res<ButtonInput<KeyCode>>,
-    query_pegs_and_balls: Query<Entity, Or<(With<Peg>, With<Ball>, With<BallSpawner>)>>,
+#[derive(Event)]
+pub struct DeleteObjects;
+
+pub fn delete_all_objects(
+    mut delete_events: EventReader<DeleteObjects>,
+    query_all_objects: Query<Entity, Or<(With<Peg>, With<Ball>, With<BallSpawner>)>>,
     mut scene_objects: ResMut<SceneObjects>,
     mut commands: Commands,
 ) {
-    if input.just_pressed(KeyCode::KeyR) {
-        for e in query_pegs_and_balls.iter() {
+    for _ in delete_events.read() {
+        for e in query_all_objects.iter() {
             commands.entity(e).despawn();
         }
         scene_objects.objects.clear();
         scene_objects.object_count = 0;
+    }
+}
+
+fn clear_screen(
+    input: Res<ButtonInput<KeyCode>>,
+    mut delete_event_writer: EventWriter<DeleteObjects>,
+) {
+    if input.just_pressed(KeyCode::KeyR) {
+        delete_event_writer.send(DeleteObjects);
     }
 }
 
@@ -526,36 +512,6 @@ fn place_peg(
         }
     }
     
-}
-
-fn convert_note_to_index(n: &Notes) -> u32 {
-    match n {
-        Notes::C3 => 0,
-        Notes::CS3 => 1,
-        Notes::D3 => 2,
-        Notes::DS3 => 3,
-        Notes::E3 => 4,
-        Notes::F3 => 5,
-        Notes::FS3 => 6,
-        Notes::G3 => 7,
-        Notes::GS3 => 8,
-        Notes::A3 => 9,
-        Notes::AS3 => 10,
-        Notes::B3 => 11,
-        Notes::C4 => 12,
-        Notes::CS4 => 13,
-        Notes::D4 => 14,
-        Notes::DS4 => 15,
-        Notes::E4 => 16,
-        Notes::F4 => 17,
-        Notes::FS4 => 18,
-        Notes::G4 => 19,
-        Notes::GS4 => 20,
-        Notes::A4 => 21,
-        Notes::AS4 => 22,
-        Notes::B4 => 23,
-        Notes::C5 => 24,
-    }
 }
 
 fn convert_index_to_note(i: u32) -> Notes {
