@@ -133,6 +133,7 @@ fn display_events(
     for collision_event in collision_events.read() {
         match collision_event {
             CollisionEvent::Started(e1, e2, _flags) => {
+                println!("asdf");
                 let note;
                 match peg_query.get(*e1) {
                     Ok(n) => note = n,
@@ -195,7 +196,7 @@ fn spawn_object(
                     .insert(ObjectId(scene_objects.object_count))
                     .insert(RigidBody::Fixed)
                     .insert(Collider::ball(25.))
-                    .insert(Notes::AS3)
+                    .insert(Notes::C3)
                     .insert(Restitution {
                         coefficient: 0.7,
                         combine_rule: CoefficientCombineRule::Max,
@@ -218,6 +219,7 @@ fn spawn_object(
                     .insert(Ball)
                     .insert(GravityScale(2.0))
                     .insert(RigidBody::Dynamic)
+                    .insert(ActiveEvents::COLLISION_EVENTS)
                     .insert(Collider::ball(25.));
             }
             Object::BallSpawner(x, y) => {

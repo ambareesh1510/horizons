@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use bevy_file_dialog::prelude::*;
 use bevy_egui::{egui, EguiContexts};
-use crate::pegs::{Ball, BallSpawner, SceneObjects, SpawnObject};
+use crate::pegs::{Ball, BallSpawner, SceneObjects, SpawnObject, Object};
 use crate::TextFileContents;
 
 pub struct UiPlugin;
@@ -29,6 +29,7 @@ pub fn ui(
     scene_objects: ResMut<SceneObjects>,
     query_balls: Query<Entity, With<Ball>>,
     query_ball_spawners: Query<&Transform, With<BallSpawner>>,
+    mut spawn_event_writer: EventWriter<SpawnObject>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
@@ -51,20 +52,7 @@ pub fn ui(
             if ui.button("Start").clicked() {
                 ui_state.started = true;
                 for transform in query_ball_spawners.iter() {
-                    commands
-                        .spawn(SpriteBundle {
-                            texture: asset_server.load("peg.png"),
-                            transform: Transform {
-                                translation: Vec3::new(transform.translation.x, transform.translation.y, 0.),
-                                scale: Vec3::new(0.3, 0.3, 1.),
-                                ..default()
-                            },
-                            ..default()
-                        })
-                        .insert(Ball)
-                        .insert(GravityScale(2.0))
-                        .insert(RigidBody::Dynamic)
-                        .insert(Collider::ball(25.));
+                    spawn_event_writer.send(SpawnObject(Object::Ball(transform.translation.x, transform.translation.y)));
                 }
             }
         }
