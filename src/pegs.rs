@@ -14,6 +14,7 @@ impl Plugin for PegPlugin {
             .insert_resource(SceneObjects { objects: HashMap::new(), object_count: 0 })
             .insert_resource(Octave(3))
             .insert_resource(CurrentDraggedPegId(None))
+            .insert_resource(ChordInput { input_active: false, input_notes: Vec::new() })
             .add_event::<SpawnObject>()
             .add_systems(Update, spawn_object)
             .add_systems(Update, spawn_ball.after(ui))
@@ -364,83 +365,98 @@ fn delete_all_pegs_and_balls(
     }
 }
 
+#[derive(Resource)]
+struct ChordInput {
+    input_active: bool,
+    input_notes: Vec<u32>,
+}
+
 fn place_peg(
     input: Res<ButtonInput<KeyCode>>,
     mut spawn_event_writer: EventWriter<SpawnObject>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
     primary_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     mut octave: ResMut<Octave>,
+    mut chord_input: ResMut<ChordInput>,
 ) {
-    
-    if input.just_pressed(KeyCode::Digit1) {
-        octave.0 = 3;
-    }
-    if input.just_pressed(KeyCode::Digit2) {
-        octave.0 = 4;
-    }
-    let mut index;
-    if octave.0 == 3 {
-        index = 0;
-    } else {
-        index = 12;
-    }
-    let mut shouldspawn = false;
-    
-    if input.just_pressed(KeyCode::KeyC) {
-        shouldspawn = true;
-        index += 0;
-    }
-    if input.just_pressed(KeyCode::KeyD) {
-        shouldspawn = true;
-
-        index += 2;
-    }
-    if input.just_pressed(KeyCode::KeyE) {
-        shouldspawn = true;
-        index += 4;
-    }
-    if input.just_pressed(KeyCode::KeyF) {
-        shouldspawn = true;
-        index += 5;
-    }
-    if input.just_pressed(KeyCode::KeyG) {
-        shouldspawn = true;
-        index += 7;
-    }
-    if input.just_pressed(KeyCode::KeyA) {
-        shouldspawn = true;
-        index += 9;
-    } 
-    if input.just_pressed(KeyCode::KeyB) {
-        shouldspawn = true;
-        index += 11;
-    }
-    
-    
-    if input.pressed(KeyCode::ShiftLeft) || input.just_pressed(KeyCode::ShiftRight) {
-        if index != 24 {
-            index += 1;
-        }
-    }
-
-    if input.pressed(KeyCode::ControlLeft) || input.just_pressed(KeyCode::ControlRight) {
-        if index != 0 {
-            index -= 1;
-        }
-    }
-    if shouldspawn {
-        let (camera, camera_transform) = primary_camera.single();
-        let mut vec = Vec::new();
-        vec.push(index);
-        if let Some(position) = primary_window
+    if chord_input.input_active {
+        if input.just_pressed(KeyCode::Enter) {
+            chord_input.input_active = false;
+            let (camera, camera_transform) = primary_camera.single();
+            if let Some(position) = primary_window
                 .single()
                 .cursor_position()
                 .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
                 .map(|ray| ray.origin.truncate())
             {
-                spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, vec)));
+                spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, chord_input.input_notes.clone())));
             }
+            chord_input.input_notes = Vec::new();
+        }
+        if input.just_pressed(KeyCode::Digit1) {
+            octave.0 = 3;
+        }
+        if input.just_pressed(KeyCode::Digit2) {
+            octave.0 = 4;
+        }
+        let mut index = if octave.0 == 3 {
+            0
+        } else {
+            12
+        };
+        let mut shouldspawn = false;
+        
+        if input.just_pressed(KeyCode::KeyC) {
+            shouldspawn = true;
+            index += 0;
+        }
+        if input.just_pressed(KeyCode::KeyD) {
+            shouldspawn = true;
+
+            index += 2;
+        }
+        if input.just_pressed(KeyCode::KeyE) {
+            shouldspawn = true;
+            index += 4;
+        }
+        if input.just_pressed(KeyCode::KeyF) {
+            shouldspawn = true;
+            index += 5;
+        }
+        if input.just_pressed(KeyCode::KeyG) {
+            shouldspawn = true;
+            index += 7;
+        }
+        if input.just_pressed(KeyCode::KeyA) {
+            shouldspawn = true;
+            index += 9;
+        } 
+        if input.just_pressed(KeyCode::KeyB) {
+            shouldspawn = true;
+            index += 11;
+        }
+        
+        
+        if input.pressed(KeyCode::ShiftLeft) || input.just_pressed(KeyCode::ShiftRight) {
+            if index != 24 {
+                index += 1;
+            }
+        }
+
+        if input.pressed(KeyCode::ControlLeft) || input.just_pressed(KeyCode::ControlRight) {
+            if index != 0 {
+                index -= 1;
+            }
+        }
+        if shouldspawn {
+            chord_input.input_notes.push(index);
+        }
+    } else {
+        if input.just_pressed(KeyCode::Enter) {
+            chord_input.input_active = true;
+        }
     }
+    
 }
 
 fn convert_note_to_index(n: &Notes) -> u32 {
