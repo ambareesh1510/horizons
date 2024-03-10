@@ -1,6 +1,7 @@
+use crate::camera::MainCamera;
 use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_rapier2d::prelude::*;
-use crate::camera::MainCamera;
+use bevy_egui::EguiContexts;
 
 pub struct PegPlugin;
 
@@ -13,22 +14,26 @@ impl Plugin for PegPlugin {
     }
 }
 
+
 #[derive(Component)]
 struct Peg;
 
 #[derive(Component)]
 struct Ball;
 
+
 fn spawn_peg(
     input: Res<ButtonInput<MouseButton>>,
+    mut contexts: EguiContexts,
     primary_window: Query<&Window, With<PrimaryWindow>>,
     primary_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
     let (camera, camera_transform) = primary_camera.single();
-    if input.just_pressed(MouseButton::Left) {
-        if let Some(position) = primary_window.single()
+    if input.just_pressed(MouseButton::Left) && !contexts.ctx_mut().wants_pointer_input() {
+        if let Some(position) = primary_window
+            .single()
             .cursor_position()
             .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
             .map(|ray| ray.origin.truncate())
@@ -56,14 +61,16 @@ fn spawn_peg(
 
 fn spawn_ball(
     input: Res<ButtonInput<MouseButton>>,
+    mut contexts: EguiContexts,
     primary_window: Query<&Window, With<PrimaryWindow>>,
     primary_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
     let (camera, camera_transform) = primary_camera.single();
-    if input.just_pressed(MouseButton::Right) {
-        if let Some(position) = primary_window.single()
+    if input.just_pressed(MouseButton::Right) && !contexts.ctx_mut().wants_pointer_input() {
+        if let Some(position) = primary_window
+            .single()
             .cursor_position()
             .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
             .map(|ray| ray.origin.truncate())
@@ -89,7 +96,7 @@ fn spawn_ball(
 fn delete_all_pegs_and_balls(
     input: Res<ButtonInput<KeyCode>>,
     query_pegs_and_balls: Query<Entity, Or<(With<Peg>, With<Ball>)>>,
-    mut commands: Commands
+    mut commands: Commands,
 ) {
     if input.just_pressed(KeyCode::KeyR) {
         for e in query_pegs_and_balls.iter() {
