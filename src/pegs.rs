@@ -1,4 +1,4 @@
-use crate::camera::MainCamera;
+use crate::camera::{Background, MainCamera};
 use crate::ui::ui;
 use bevy::{asset, prelude::*, window::PrimaryWindow};
 use bevy_rapier2d::prelude::*;
@@ -133,19 +133,28 @@ fn display_events(
     mut collision_events: EventReader<CollisionEvent>,
     mut contact_force_events: EventReader<ContactForceEvent>,
     mut commands: Commands,
-    peg_query: Query<&Notes>,
+    peg_query: Query<(&Notes, &Sprite)>,
+    mut background_query: Query<&mut Sprite, (With<Background>, Without<Notes>)>,
     asset_server: Res<AssetServer>,
 ) {
+    let Ok(mut background_sprite) = background_query.get_single_mut() else { return };
     for collision_event in collision_events.read() {
         match collision_event {
             CollisionEvent::Started(e1, e2, _flags) => {
                 let note;
+                let peg_sprite;
                 match peg_query.get(*e1) {
-                    Ok(n) => note = n,
-                    Err(_e) => match peg_query.get(*e2) {
-                        Ok(n) => note = n,
-                        Err(e) => {
-                            println!("note not played {:?}", e);
+                    Ok((n, sprite)) => {
+                        note = n;
+                        peg_sprite = sprite;
+                    }
+                    Err(_) => match peg_query.get(*e2) {
+                        Ok((n, sprite)) => {
+                            note = n;
+                            peg_sprite = sprite;
+                        }
+                        Err(_) => {
+                            // println!("note not played {:?}", e);
                             return;
                         }
                     },
@@ -154,18 +163,13 @@ fn display_events(
                     source: asset_server.load(note.to_file_path()),
                     ..default()
                 });
+                // use peg_sprite
+                background_sprite.color = Color::rgb_from_array(peg_sprite.color.rgb_to_vec3() / 3.5);
             }
             _ => {}
         }
-        // if let Ok(Notes::C3) = peg_query.get_component::<Notes>(collision_event.collider1_entity) {
-        //     commands.spawn(
-        //         AudioBundle {
-        //             source: asset_server.load("sounds/c3.ogg"),
-        //             ..default()
-        //         }
-        //     );
-        // }
     }
+    background_sprite.color = Color::rgb_from_array(background_sprite.color.rgb_to_vec3() / 1.1);
     
 
     for contact_force_event in contact_force_events.read() {
@@ -178,6 +182,14 @@ pub struct BallSpawner;
 #[derive(Component)]
 struct ObjectId(u32);
 
+fn gaussian_sample(x: f32, mean: f32) -> f32 {
+    4. * (-8. * ((x - mean) / 2.).powf(2.)).exp()
+}
+
+fn gaussian_sample_triple(mean: f32) -> (f32, f32, f32) {
+    (gaussian_sample(0., mean), gaussian_sample(1., mean), gaussian_sample(2., mean))
+}
+
 fn spawn_object(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -187,11 +199,17 @@ fn spawn_object(
     for ev in spawn_events.read() {
         match ev.0 {
             Object::Peg(x, y, notes) => {
+                let (r, g, b) = gaussian_sample_triple(convert_note_to_index(&notes[0]) as f32 / 24.);
                 commands
                     .spawn(SpriteBundle {
                         texture: asset_server.load("peg.png"),
+                        sprite: Sprite {
+                            color: Color::rgb(r, g, b),
+                            custom_size: Some(Vec2::splat(100.)),
+                            ..default()
+                        },
                         transform: Transform {
-                            translation: Vec3::new(x, y, 0.),
+                            translation: Vec3::new(x, y, 1.),
                             scale: Vec3::new(0.3, 0.3, 1.),
                             ..default()
                         },
@@ -200,8 +218,8 @@ fn spawn_object(
                     .insert(Peg)
                     .insert(ObjectId(scene_objects.object_count))
                     .insert(RigidBody::Fixed)
-                    .insert(Collider::ball(25.))
-                    .insert(note.clone())
+                    .insert(Collider::ball(45.))
+                    .insert(convert_index_to_note(note))
                     .insert(Restitution {
                         coefficient: 0.7,
                         combine_rule: CoefficientCombineRule::Max,
@@ -215,8 +233,14 @@ fn spawn_object(
                 commands
                     .spawn(SpriteBundle {
                         texture: asset_server.load("peg.png"),
+                        sprite: Sprite {
+                            color: Color::rgb(7.5, 0.0, 7.5),
+                            // color: Color::WHITE,
+                            custom_size: Some(Vec2::splat(100.)),
+                            ..default()
+                        },
                         transform: Transform {
-                            translation: Vec3::new(x, y, 0.),
+                            translation: Vec3::new(x, y, 1.),
                             scale: Vec3::new(0.3, 0.3, 1.),
                             ..default()
                         },
@@ -226,14 +250,19 @@ fn spawn_object(
                     .insert(GravityScale(2.0))
                     .insert(RigidBody::Dynamic)
                     .insert(ActiveEvents::COLLISION_EVENTS)
-                    .insert(Collider::ball(25.));
+                    .insert(Collider::ball(45.));
             }
             Object::BallSpawner(x, y) => {
                 commands
                     .spawn(SpriteBundle {
-                        texture: asset_server.load("spawner.png"),
+                        texture: asset_server.load("peg.png"),
+                        sprite: Sprite {
+                            color: Color::rgb(0.0, 0.0, 10.0),
+                            custom_size: Some(Vec2::splat(100.)),
+                            ..default()
+                        },
                         transform: Transform {
-                            translation: Vec3::new(x, y, 0.),
+                            translation: Vec3::new(x, y, 1.),
                             scale: Vec3::new(0.3, 0.3, 1.),
                             ..default()
                         },
@@ -327,20 +356,19 @@ fn delete_all_pegs_and_balls(
 fn place_peg(
     input: Res<ButtonInput<KeyCode>>,
     mut spawn_event_writer: EventWriter<SpawnObject>,
-    mut contexts: EguiContexts,
     primary_window: Query<&Window, With<PrimaryWindow>>,
     primary_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     mut octave: ResMut<Octave>,
 ) {
     
-    if(input.just_pressed(KeyCode::Digit1)) {
+    if input.just_pressed(KeyCode::Digit1) {
         octave.0 = 3;
     }
-    if(input.just_pressed(KeyCode::Digit2)) {
+    if input.just_pressed(KeyCode::Digit2) {
         octave.0 = 4;
     }
     let mut index;
-    if(octave.0 == 3) {
+    if octave.0 == 3 {
         index = 0;
     } else {
         index = 12;
@@ -378,47 +406,18 @@ fn place_peg(
     }
     
     
-    if(input.pressed(KeyCode::ShiftLeft) || input.just_pressed(KeyCode::ShiftRight)) {
-        if (index != 24) {
+    if input.pressed(KeyCode::ShiftLeft) || input.just_pressed(KeyCode::ShiftRight) {
+        if index != 24 {
             index += 1;
         }
     }
 
-    if(input.pressed(KeyCode::ControlLeft) || input.just_pressed(KeyCode::ControlRight)) {
-        if (index != 0) {
+    if input.pressed(KeyCode::ControlLeft) || input.just_pressed(KeyCode::ControlRight) {
+        if index != 0 {
             index -= 1;
         }
     }
-    let note: Notes;
-    match index {
-        0 => note = Notes::C3,
-        1 => note = Notes::CS3,
-        2 => note = Notes::D3,
-        3 => note = Notes::DS3,
-        4 => note = Notes::E3,
-        5 => note = Notes::F3,
-        6 => note = Notes::FS3,
-        7 => note = Notes::G3,
-        8 => note = Notes::GS3,
-        9 => note = Notes::A3,
-        10 => note = Notes::AS3,
-        11 => note = Notes::B3,
-        12 => note = Notes::C4,
-        13 => note = Notes::CS4,
-        14 => note = Notes::D4,
-        15 => note = Notes::DS4,
-        16 => note = Notes::E4,
-        17 => note = Notes::F4,
-        18 => note = Notes::FS4,
-        19 => note = Notes::G4,
-        20 => note = Notes::GS4,
-        21 => note = Notes::A4,
-        22 => note = Notes::AS4,
-        23 => note = Notes::B4,
-        24 => note = Notes::C5,
-        _ => note = Notes::C3,
-    }
-    if(shouldspawn) {
+    if shouldspawn {
         let (camera, camera_transform) = primary_camera.single();
         let mut vec = Vec::new();
         vec.push(note);
@@ -431,10 +430,67 @@ fn place_peg(
                 spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, vec)));
             }
     }
-    
+}
 
+fn convert_note_to_index(n: &Notes) -> u32 {
+    match n {
+        Notes::C3 => 0,
+        Notes::CS3 => 1,
+        Notes::D3 => 2,
+        Notes::DS3 => 3,
+        Notes::E3 => 4,
+        Notes::F3 => 5,
+        Notes::FS3 => 6,
+        Notes::G3 => 7,
+        Notes::GS3 => 8,
+        Notes::A3 => 9,
+        Notes::AS3 => 10,
+        Notes::B3 => 11,
+        Notes::C4 => 12,
+        Notes::CS4 => 13,
+        Notes::D4 => 14,
+        Notes::DS4 => 15,
+        Notes::E4 => 16,
+        Notes::F4 => 17,
+        Notes::FS4 => 18,
+        Notes::G4 => 19,
+        Notes::GS4 => 20,
+        Notes::A4 => 21,
+        Notes::AS4 => 22,
+        Notes::B4 => 23,
+        Notes::C5 => 24,
+    }
+}
 
-
+fn convert_index_to_note(i: u32) -> Notes {
+    match i {
+        0 => Notes::C3,
+        1 => Notes::CS3,
+        2 => Notes::D3,
+        3 => Notes::DS3,
+        4 => Notes::E3,
+        5 => Notes::F3,
+        6 => Notes::FS3,
+        7 => Notes::G3,
+        8 => Notes::GS3,
+        9 => Notes::A3,
+        10 => Notes::AS3,
+        11 => Notes::B3,
+        12 => Notes::C4,
+        13 => Notes::CS4,
+        14 => Notes::D4,
+        15 => Notes::DS4,
+        16 => Notes::E4,
+        17 => Notes::F4,
+        18 => Notes::FS4,
+        19 => Notes::G4,
+        20 => Notes::GS4,
+        21 => Notes::A4,
+        22 => Notes::AS4,
+        23 => Notes::B4,
+        24 => Notes::C5,
+        _ => Notes::C3,
+    }
 }
 
 #[derive(Resource)]
