@@ -12,6 +12,7 @@ impl Plugin for PegPlugin {
     fn build(&self, app: &mut App) {
         app
             .insert_resource(SceneObjects { objects: HashMap::new(), object_count: 0 })
+            .insert_resource(Octave(3))
             .add_event::<SpawnObject>()
             .add_systems(Update, spawn_object)
             .add_systems(Update, spawn_peg.after(ui))
@@ -19,11 +20,15 @@ impl Plugin for PegPlugin {
             .add_systems(Update, spawn_ball_spawner.after(ui))
             .add_systems(Update, cleanup_sounds)
             .add_systems(Startup, setup_sound)
+            .add_systems(Update, place_peg)
             .add_systems(Update, display_events)
             .add_systems(Update, delete_all_pegs_and_balls);
     
     }
 }
+
+#[derive(Resource)]
+pub struct Octave(pub u32);
 
 #[derive(Resource, Clone, Serialize, Deserialize)]
 pub struct SceneObjects {
@@ -33,7 +38,7 @@ pub struct SceneObjects {
 
 #[derive(Resource, Clone, Serialize, Deserialize)]
 pub enum Object {
-    Peg(f32, f32),
+    Peg(f32, f32, Notes),
     Ball(f32, f32),
     BallSpawner(f32, f32),
 }
@@ -47,7 +52,7 @@ struct Peg;
 #[derive(Component)]
 pub struct Ball;
 
-#[derive(Component, Debug, PartialEq, Eq)]
+#[derive(Component, Debug, PartialEq, Eq, Clone, Serialize, Deserialize, Copy)]
 enum Notes {
     C3,
     CS3,
@@ -181,7 +186,7 @@ fn spawn_object(
 ) {
     for ev in spawn_events.read() {
         match ev.0 {
-            Object::Peg(x, y) => {
+            Object::Peg(x, y, note) => {
                 commands
                     .spawn(SpriteBundle {
                         texture: asset_server.load("peg.png"),
@@ -196,7 +201,7 @@ fn spawn_object(
                     .insert(ObjectId(scene_objects.object_count))
                     .insert(RigidBody::Fixed)
                     .insert(Collider::ball(25.))
-                    .insert(Notes::C3)
+                    .insert(note.clone())
                     .insert(Restitution {
                         coefficient: 0.7,
                         combine_rule: CoefficientCombineRule::Max,
@@ -258,7 +263,7 @@ fn spawn_peg(
             .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
             .map(|ray| ray.origin.truncate())
         {
-            spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y)));
+            spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, Notes::A3)));
         }
     }
 }
@@ -316,6 +321,117 @@ fn delete_all_pegs_and_balls(
         scene_objects.objects.clear();
         scene_objects.object_count = 0;
     }
+}
+
+fn place_peg(
+    input: Res<ButtonInput<KeyCode>>,
+    mut spawn_event_writer: EventWriter<SpawnObject>,
+    mut contexts: EguiContexts,
+    primary_window: Query<&Window, With<PrimaryWindow>>,
+    primary_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
+    mut octave: ResMut<Octave>,
+) {
+    
+    if(input.just_pressed(KeyCode::Digit1)) {
+        octave.0 = 3;
+    }
+    if(input.just_pressed(KeyCode::Digit2)) {
+        octave.0 = 4;
+    }
+    let mut index;
+    if(octave.0 == 3) {
+        index = 0;
+    } else {
+        index = 12;
+    }
+    let mut shouldspawn = false;
+    
+    if input.just_pressed(KeyCode::KeyC) {
+        shouldspawn = true;
+        index += 0;
+    }
+    if input.just_pressed(KeyCode::KeyD) {
+        shouldspawn = true;
+
+        index += 2;
+    }
+    if input.just_pressed(KeyCode::KeyE) {
+        shouldspawn = true;
+        index += 4;
+    }
+    if input.just_pressed(KeyCode::KeyF) {
+        shouldspawn = true;
+        index += 5;
+    }
+    if input.just_pressed(KeyCode::KeyG) {
+        shouldspawn = true;
+        index += 7;
+    }
+    if input.just_pressed(KeyCode::KeyA) {
+        shouldspawn = true;
+        index += 9;
+    } 
+    if input.just_pressed(KeyCode::KeyB) {
+        shouldspawn = true;
+        index += 11;
+    }
+    
+    
+    if(input.pressed(KeyCode::ShiftLeft) || input.just_pressed(KeyCode::ShiftRight)) {
+        if (index != 24) {
+            index += 1;
+        }
+    }
+
+    if(input.pressed(KeyCode::ControlLeft) || input.just_pressed(KeyCode::ControlRight)) {
+        if (index != 0) {
+            index -= 1;
+        }
+    }
+    let note: Notes;
+    match index {
+        0 => note = Notes::C3,
+        1 => note = Notes::CS3,
+        2 => note = Notes::D3,
+        3 => note = Notes::DS3,
+        4 => note = Notes::E3,
+        5 => note = Notes::F3,
+        6 => note = Notes::FS3,
+        7 => note = Notes::G3,
+        8 => note = Notes::GS3,
+        9 => note = Notes::A3,
+        10 => note = Notes::AS3,
+        11 => note = Notes::B3,
+        12 => note = Notes::C4,
+        13 => note = Notes::CS4,
+        14 => note = Notes::D4,
+        15 => note = Notes::DS4,
+        16 => note = Notes::E4,
+        17 => note = Notes::F4,
+        18 => note = Notes::FS4,
+        19 => note = Notes::G4,
+        20 => note = Notes::GS4,
+        21 => note = Notes::A4,
+        22 => note = Notes::AS4,
+        23 => note = Notes::B4,
+        24 => note = Notes::C5,
+        _ => note = Notes::C3,
+    }
+    if(shouldspawn) {
+        let (camera, camera_transform) = primary_camera.single();
+        if let Some(position) = primary_window
+                .single()
+                .cursor_position()
+                .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+                .map(|ray| ray.origin.truncate())
+            {
+                spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, note)));
+            }
+    }
+    
+
+
+
 }
 
 
