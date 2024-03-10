@@ -230,10 +230,6 @@ fn spawn_object(
                 let object_count = scene_objects.object_count;
                 scene_objects.objects.insert(object_count, ev.0.clone());
                 scene_objects.object_count += 1;
-
-                
-                
-                
             }
             Object::Ball(x, y) => {
                 commands
@@ -369,13 +365,15 @@ fn place_peg(
         if input.just_pressed(KeyCode::Enter) {
             chord_input.input_active = false;
             let (camera, camera_transform) = primary_camera.single();
-            if let Some(position) = primary_window
-                .single()
-                .cursor_position()
-                .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
-                .map(|ray| ray.origin.truncate())
-            {
-                spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, chord_input.input_notes.clone())));
+            if chord_input.input_notes.len() > 0 {
+                if let Some(position) = primary_window
+                    .single()
+                    .cursor_position()
+                    .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+                    .map(|ray| ray.origin.truncate())
+                {
+                    spawn_event_writer.send(SpawnObject(Object::Peg(position.x, position.y, chord_input.input_notes.clone())));
+                }
             }
             chord_input.input_notes = Vec::new();
             return;
@@ -560,6 +558,7 @@ fn drag_peg(
     mut current_dragged_peg_id: ResMut<CurrentDraggedPegId>,
     mut commands: Commands,
 ) {
+    let peg_radius = 18.;
     let (camera, camera_transform) = primary_camera.single();
 
     if keyboard_input.just_pressed(KeyCode::KeyX) && !contexts.ctx_mut().wants_pointer_input() {
@@ -570,14 +569,14 @@ fn drag_peg(
             .map(|ray| ray.origin.truncate())
         {
             for (transform, ObjectId(id), entity_id) in pegs.iter() {
-                if transform.translation.truncate().distance(position) <= 10. {
+                if transform.translation.truncate().distance(position) <= peg_radius {
                     commands.entity(entity_id).despawn();
                     scene_objects.objects.remove(id);
                     return;
                 }
             }
             for (transform, ObjectId(id), entity_id) in ball_spawners.iter() {
-                if transform.translation.truncate().distance(position) <= 10. {
+                if transform.translation.truncate().distance(position) <= peg_radius {
                     commands.entity(entity_id).despawn();
                     scene_objects.objects.remove(id);
                     return;
@@ -592,13 +591,13 @@ fn drag_peg(
             .map(|ray| ray.origin.truncate())
         {
             for (transform, ObjectId(id), _) in pegs.iter() {
-                if transform.translation.truncate().distance(position) <= 10. {
+                if transform.translation.truncate().distance(position) <= peg_radius {
                     current_dragged_peg_id.0 = Some(*id);
                     return;
                 }
             }
             for (transform, ObjectId(id), _) in ball_spawners.iter() {
-                if transform.translation.truncate().distance(position) <= 10. {
+                if transform.translation.truncate().distance(position) <= peg_radius {
                     current_dragged_peg_id.0 = Some(*id);
                     return;
                 }
@@ -628,11 +627,6 @@ fn drag_peg(
                         }
                         _ => panic!("Expected to be dragging peg; was not dragging peg!"),
                     }
-                    // let Object::Peg(x, y, _) = object else {
-                    //     let Object::BallSpawner(x, y) = object else {
-                    //         panic!("Expecteddd to be dragging peg; was not dragging peg!");
-                    //     };
-                    // };
                     *x = position.x;
                     *y = position.y;
                     for (mut transform, ObjectId(obj_id), _) in pegs.iter_mut() {

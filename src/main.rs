@@ -36,5 +36,5 @@ fn main() {
 fn setup(
     mut rapier_config: ResMut<RapierConfiguration>,
 ) {
-    rapier_config.timestep_mode = TimestepMode::Fixed { dt: 1./60., substeps: 1 };
+    rapier_config.timestep_mode = TimestepMode::Fixed { dt: 1./64., substeps: 1 };
 }
